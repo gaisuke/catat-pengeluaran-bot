@@ -10,44 +10,47 @@ async function generateResponse(inputText) {
     }
 
     const prompt = `
-Tolong ekstrak informasi pengeluaran dari kalimat berikut.
+Tolong deteksi apakah ini = "${inputText}" adalah permintaan laporan pengeluaran atau pencatatan transaksi.
 
-Contoh input:
-- "beli cilok 5rb"
-- "bayar kos 1,25 juta"
-- "jajan es krim 10k"
-
-Untuk setiap input, hasilkan JSON dengan struktur:
+Jika pengguna minta laporan (seperti "berapa pengeluaran minggu ini"), balas seperti ini:
 {
-  "description": "...",
-  "amount": ..., // dalam angka, rupiah
-  "category": "...", // boleh 'Uncategorized' kalau tidak yakin
-  "date": "now"
+  "intent": "report_week"
 }
 
-Input: "${inputText}"
+Jika pengguna mencatat pengeluaran (misal "beli kopi 10rb"), balas seperti ini:
+{
+  "intent": "add_expense",
+  "data" : {
+    "description": the description,
+    "amount": the amount that user input,
+    "category": determine from the input or uncategorized for default
+  }
+}
 `;
 
-    response = await genAI.models.generateContent({
+    const result = await genAI.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
+        temperature: 0.2,
+        maxOutputTokens: 500
     });
-    // console.log(response);
 
     // loop through candidates and log their content
-    for (let i = 0; i < response.candidates.length; i++) {
-        if (response.candidates[i].error) {
-            console.error(`Error in candidate ${i + 1}:`, response.candidates[i].error);
+    for (let i = 0; i < result.candidates.length; i++) {
+        if (result.candidates[i].error) {
+            console.error(`Error in candidate ${i + 1}:`, result.candidates[i].error);
             continue;
         }
-        if (!response.candidates[i].content) {
+        if (!result.candidates[i].content) {
             console.error(`No content in candidate ${i + 1}`);
             continue;
         }
 
         try {
             // Extract text from parts array
-            const textContent = response.candidates[i].content.parts[0].text;
+            const textContent = result.candidates[i].content.parts[0].text;
+
+            console.log('textContent =', textContent)
 
             // Extract JSON from markdown code block
             const jsonMatch = textContent.match(/```json\n([\s\S]*?)\n```/);
@@ -59,6 +62,7 @@ Input: "${inputText}"
             const jsonString = jsonMatch[1];
             const parsedContent = JSON.parse(jsonString);
 
+            console.log(`Parsed content from candidate ${i + 1}:`, parsedContent);
             return parsedContent;
         } catch (error) {
             console.error(`Error parsing candidate ${i + 1} content:`, error);
